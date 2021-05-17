@@ -106,12 +106,12 @@ class Bilibili_downloader():
         # os.chdir(os.path.join(os.getcwd(), 'video'))
         # 使用此命令需要提前下载ffmpeg，并将其添加至环境变量
         cmd = 'ffmpeg -i ' + os.path.join(self.video_path, 'audio.mp4') + \
-            ' -i ' + os.path.join(self.video_path, 'video.mp4') + ' ' + os.path.join(self.video_path, outfile_name + '.mp4')
+            ' -i ' + os.path.join(self.video_path, 'video.mp4') + ' -strict -2 ' + os.path.join(self.video_path, outfile_name + '.mp4')
         # print(cmd)
         try:
             print('开始视频合成，请耐心等待...')
-            subprocess.call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT, shell=True)  # "Muxing Done
-            # subprocess.call(cmd, shell=True)  # "Muxing Done
+            # subprocess.call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT, shell=True)  # "Muxing Done
+            subprocess.call(cmd, shell=True)  # "Muxing Done
             print('视频合并完成！')
         except Exception:
             print('视频路径有误，请再次尝试...')
@@ -119,7 +119,7 @@ class Bilibili_downloader():
 
     def run(self):
         self.AudiouURL, self.VideoURL = self.get_real_address(self.url, self.header)
-        self.downloader(self.AudiouURL, self.VideoURL)
+        # self.downloader(self.AudiouURL, self.VideoURL)
         self.combination(self.video_title)
 
 if __name__ == '__main__':
