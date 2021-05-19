@@ -37,7 +37,7 @@ class football_video_downloader():
         pattern = r'topictitle:".*?"'
         title = re.findall(pattern, info)[0].replace('topictitle:','').replace('"','')
         title = re.sub(r'[\/\\:*?"<>|]', '', title)  # 替换为空的，预防出现非法字符
-        video_path = os.path.join(self.fromer_path, title) # 视频的下载存储位置
+        video_path = os.path.join(self.fromer_path, title + '-1') # 视频的下载存储位置
         folder = os.path.exists(video_path)
         if not folder:
             os.mkdir(video_path)
@@ -70,18 +70,20 @@ class football_video_downloader():
     def vider_down(self, m3u8_name):
         playlist = m3u8.load(os.path.join(self.video_path, m3u8_name))
         # 线程池下载ts，引入index可以防止合成时视频发生乱序
+        # with alive_bar(len(playlist.segments), title="合成视频", bar="bubbles", spinner="classic") as bar:
         for i in range(2): # 下载两遍，防止部分ts文件因网络原因而未下载
             with ThreadPoolExecutor(max_workers=10) as pool:
                 for index, seg in enumerate(playlist.segments):
                     pool.submit(self.save_ts, seg.uri, index)
+                        # bar()
         
         files = glob.glob(os.path.join(self.video_path, '*.ts'))
         with alive_bar(len(files), title="合成视频", bar="bubbles", spinner="classic") as bar:
             for file in files:
-                with open(file, 'rb') as fr, open(os.path.join(self.video_path, self.title + '.mp4'), 'ab') as fw:
+                with open(file, 'rb') as fr, open(os.path.join(self.video_path, self.title + '.ts'), 'ab') as fw:
                     content = fr.read()
                     fw.write(content)
-                os.remove(file)
+                # os.remove(file)
                 bar()
                 # time.sleep(0.2)
 
@@ -98,7 +100,7 @@ class football_video_downloader():
 
 
 if __name__ == '__main__': 
-    url = 'https://wx.vzan.com/live/tvchat-1144900564?shareuid=384105064&vprid=0&sharetstamp=1618714385266'
+    url = 'https://wx.vzan.com/live/tvchat-1144900564?shareuid=384105064&vprid=0&sharetstamp=1618714385266' # VS环资
     header = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:88.0) Gecko/20100101 Firefox/88.0',
             'Accept': '*/*',
