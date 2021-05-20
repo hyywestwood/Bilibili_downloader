@@ -115,7 +115,8 @@ if __name__ == '__main__':
     # url = 'https://wx.vzan.com/live/tvchat-1144900564?shareuid=384105064&vprid=0&sharetstamp=1618714385266' # VS环资
     # url = 'https://wx.vzan.com/live/tvchat-1827957806?v=1621501131000&jumpitd=1#/' # 能源vs公管
     # url = 'https://wx.vzan.com/live/tvchat-1276238835?v=1621504811000&jumpitd=1#/' # 计院vs信电
-    url = 'https://wx.vzan.com/live/tvchat-2003603387?v=1621506997000&jumpitd=1#/' # 控制vs云峰
+    # url = 'https://wx.vzan.com/live/tvchat-2003603387?v=1621506997000&jumpitd=1#/' # 控制vs云峰
+    url = 'https://wx.vzan.com/live/tvchat-2124676592?v=1621520152000&jumpitd=1#/' # 建工vs材料
     header = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:88.0) Gecko/20100101 Firefox/88.0',
             'Accept': '*/*',
