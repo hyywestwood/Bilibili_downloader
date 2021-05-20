@@ -7,6 +7,7 @@ from bs4 import BeautifulSoup
 from alive_progress import alive_bar
 import glob
 from concurrent.futures import ThreadPoolExecutor
+import subprocess
 
 
 class football_video_downloader():
@@ -22,8 +23,9 @@ class football_video_downloader():
             os.mkdir(os.path.join(self.fromer_path))
     
     def run(self):
-        self.video_path, self.m3u8_name, self.title = self.get_m3u8(self.url, self.header)
-        self.vider_down(self.m3u8_name)
+        self.video_path, self.m3u8_name, self.title = self.get_m3u8(self.url, self.header) # 获取该网址下视频信息，下载对应m3u8文件
+        self.vider_down(self.m3u8_name) # 利用m3u8文件下载，分段的比赛视频，并最终合并呈MP4格式的视频文件
+        self.trans_encode() # 不知为何，此时MP4文件虽然能正常播放，但无法拖入剪映，需要再转换一下视频编码
 
 
     def get_m3u8(self, url, header):
@@ -37,7 +39,7 @@ class football_video_downloader():
         pattern = r'topictitle:".*?"'
         title = re.findall(pattern, info)[0].replace('topictitle:','').replace('"','')
         title = re.sub(r'[\/\\:*?"<>|]', '', title)  # 替换为空的，预防出现非法字符
-        video_path = os.path.join(self.fromer_path, title + '-1') # 视频的下载存储位置
+        video_path = os.path.join(self.fromer_path, title) # 视频的下载存储位置
         folder = os.path.exists(video_path)
         if not folder:
             os.mkdir(video_path)
@@ -74,20 +76,20 @@ class football_video_downloader():
         for i in range(2): # 下载两遍，防止部分ts文件因网络原因而未下载
             with ThreadPoolExecutor(max_workers=10) as pool:
                 for index, seg in enumerate(playlist.segments):
-                    pool.submit(self.save_ts, seg.uri, index)
+                    pool.submit(self.save_ts, seg.uri, index, len(playlist.segments))
                         # bar()
         
         files = glob.glob(os.path.join(self.video_path, '*.ts'))
         with alive_bar(len(files), title="合成视频", bar="bubbles", spinner="classic") as bar:
             for file in files:
-                with open(file, 'rb') as fr, open(os.path.join(self.video_path, self.title + '.ts'), 'ab') as fw:
+                with open(file, 'rb') as fr, open(os.path.join(self.video_path, self.title + '.mp4'), 'ab') as fw:
                     content = fr.read()
                     fw.write(content)
-                # os.remove(file)
+                os.remove(file)
                 bar()
                 # time.sleep(0.2)
 
-    def save_ts(self, url, index):
+    def save_ts(self, url, index, total_num):
         filename = os.path.join(self.video_path, str(index).zfill(5) + '.ts')
         if not os.path.exists(filename):
             with closing(requests.get(url=url, headers= header, stream=True, timeout=120)) as response:
@@ -95,12 +97,25 @@ class football_video_downloader():
                 with open(filename, "wb") as file:
                     for data in response.iter_content(chunk_size=chunk_size):
                         file.write(data)
-            print(filename + ' is ok!    ')
+            print(filename + ' is ok! ' + '[' + str(index) + '/' + str(total_num)+']')
+    
+    # 改变视频编码
+    def trans_encode(self):
+        cmd = 'ffmpeg -i ' + os.path.join(self.video_path, self.title + '.mp4') + \
+            ' -vcodec copy -acodec copy -f mp4 ' + os.path.join(self.video_path, self.title + '-1.mp4')
+        try:
+            subprocess.call(cmd, shell=True)  # "Muxing Done
+        except Exception:
+            print('视频路径有误，请再次尝试...')
+
 
 
 
 if __name__ == '__main__': 
-    url = 'https://wx.vzan.com/live/tvchat-1144900564?shareuid=384105064&vprid=0&sharetstamp=1618714385266' # VS环资
+    # url = 'https://wx.vzan.com/live/tvchat-1144900564?shareuid=384105064&vprid=0&sharetstamp=1618714385266' # VS环资
+    # url = 'https://wx.vzan.com/live/tvchat-1827957806?v=1621501131000&jumpitd=1#/' # 能源vs公管
+    # url = 'https://wx.vzan.com/live/tvchat-1276238835?v=1621504811000&jumpitd=1#/' # 计院vs信电
+    url = 'https://wx.vzan.com/live/tvchat-2003603387?v=1621506997000&jumpitd=1#/' # 控制vs云峰
     header = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:88.0) Gecko/20100101 Firefox/88.0',
             'Accept': '*/*',
