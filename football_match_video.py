@@ -24,7 +24,7 @@ class football_video_downloader():
     
     def run(self):
         self.video_path, self.m3u8_name, self.title = self.get_m3u8(self.url, self.header) # 获取该网址下视频信息，下载对应m3u8文件
-        self.vider_down(self.m3u8_name) # 利用m3u8文件下载，分段的比赛视频，并最终合并呈MP4格式的视频文件
+        # self.vider_down(self.m3u8_name) # 利用m3u8文件下载，分段的比赛视频，并最终合并呈MP4格式的视频文件
         self.trans_encode() # 不知为何，此时MP4文件虽然能正常播放，但无法拖入剪映，需要再转换一下视频编码
 
 
@@ -71,13 +71,12 @@ class football_video_downloader():
     # 读取m3u8文件信息,下载ts文件并最后合并为mp4文件
     def vider_down(self, m3u8_name):
         playlist = m3u8.load(os.path.join(self.video_path, m3u8_name))
+        
         # 线程池下载ts，引入index可以防止合成时视频发生乱序
-        # with alive_bar(len(playlist.segments), title="合成视频", bar="bubbles", spinner="classic") as bar:
         for i in range(2): # 下载两遍，防止部分ts文件因网络原因而未下载
             with ThreadPoolExecutor(max_workers=10) as pool:
                 for index, seg in enumerate(playlist.segments):
                     pool.submit(self.save_ts, seg.uri, index, len(playlist.segments))
-                        # bar()
         
         files = glob.glob(os.path.join(self.video_path, '*.ts'))
         with alive_bar(len(files), title="合成视频", bar="bubbles", spinner="classic") as bar:
@@ -102,9 +101,17 @@ class football_video_downloader():
     # 改变视频编码
     def trans_encode(self):
         cmd = 'ffmpeg -i ' + os.path.join(self.video_path, self.title + '.mp4') + \
-            ' -vcodec copy -acodec copy -f mp4 ' + os.path.join(self.video_path, self.title + '-1.mp4')
+            ' -vcodec copy -acodec copy -f mp4 ' + os.path.join(self.video_path, self.title + '-2.mp4')
         try:
-            subprocess.call(cmd, shell=True)  # "Muxing Done
+            # res = subprocess.call(cmd, shell=True)  # "Muxing Done
+            subprocess.call(cmd, shell=True)
+            # if res != 0:
+            #     cmd = 'ffmpeg -i ' + os.path.join(self.video_path, self.title + '.mp4') + \
+            #         ' -vcodec copy -an -f mp4 ' + os.path.join(self.video_path, self.title + '-1.mp4')
+            #     print('视频转换失败，尝试取消导出音频...')
+            #     subprocess.call(cmd, shell=True)  # "Muxing Done
+            #     # return False
+            # return True
         except Exception:
             print('视频路径有误，请再次尝试...')
 
@@ -116,7 +123,9 @@ if __name__ == '__main__':
     # url = 'https://wx.vzan.com/live/tvchat-1827957806?v=1621501131000&jumpitd=1#/' # 能源vs公管
     # url = 'https://wx.vzan.com/live/tvchat-1276238835?v=1621504811000&jumpitd=1#/' # 计院vs信电
     # url = 'https://wx.vzan.com/live/tvchat-2003603387?v=1621506997000&jumpitd=1#/' # 控制vs云峰
-    url = 'https://wx.vzan.com/live/tvchat-2124676592?v=1621520152000&jumpitd=1#/' # 建工vs材料
+    # url = 'https://wx.vzan.com/live/tvchat-2124676592?v=1621520152000&jumpitd=1#/' # 建工vs材料
+    # url = 'https://wx.vzan.com/live/tvchat-8456138?v=1621743956000&jumpitd=1#/' # 海洋vs建工 
+    url = 'https://wx.vzan.com/live/tvchat-1725581328?v=1621743561000&jumpitd=1#/' # 光电vs海洋
     header = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:88.0) Gecko/20100101 Firefox/88.0',
             'Accept': '*/*',
