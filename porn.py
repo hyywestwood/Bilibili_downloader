@@ -3,7 +3,6 @@ import requests
 import json
 import os, re, time, m3u8
 from contextlib import closing
-from bs4 import BeautifulSoup
 from alive_progress import alive_bar
 import glob
 from concurrent.futures import ThreadPoolExecutor
@@ -20,7 +19,8 @@ class porn_downloader():
         self.make_dir(self.base_dir)
 
         if os.path.exists(os.path.join(self.base_dir, 'video_data_json.json')):
-            self.video_data_json = json.load(os.path.join(self.base_dir, 'video_data_json.json'))
+            with open(os.path.join(self.base_dir, 'video_data_json.json'), 'r', encoding='utf-8') as jf:
+                self.video_data_json = json.load(jf)
         else:
             self.video_data_json = {}
 
@@ -78,8 +78,22 @@ class porn_downloader():
     def download_video(self, video_id, video_path):
         single_v_url = self.real_base_url + '/video/video_play.html?video_id=' + video_id # 构造视频播放地址
         res = requests.get(url=single_v_url, headers = self.header)
-        m3u8_url = re.search('vPlayerM3u8Url = "(.*?)"', res.text).group(1)  # 获取视频m3u8文件地址
-        with closing(requests.get(url=m3u8_url, headers= self.header, stream=True, timeout=120)) as response:
+        m3u8_url_temp = re.search('vPlayerM3u8Url = "(.*?)"', res.text).group(1)  # 获取视频m3u8文件地址, 第一层
+        with closing(requests.get(url=m3u8_url_temp, headers= self.header, stream=True, timeout=120)) as response:
+            chunk_size = 1024 # 单次请求最大值
+            with open(os.path.join(video_path, 'index.m3u8'), "wb") as file:
+                for data in response.iter_content(chunk_size=chunk_size):
+                    file.write(data)
+        
+        with open (os.path.join(video_path, 'index.m3u8'), "r") as file:
+            for line in file:
+                if not line.startswith('#'):
+                    real_m3u8_url_right = line.replace('\n', '')
+                    break
+        real_m3u8_url_left = re.search('(https://.*?)/', m3u8_url_temp).group(1)
+        real_m3u8_url = real_m3u8_url_left + real_m3u8_url_right
+        # 下载真实的m3u8文件，这个网站真的牛皮
+        with closing(requests.get(url=real_m3u8_url, headers= self.header, stream=True, timeout=120)) as response:
             chunk_size = 1024 # 单次请求最大值
             with open(os.path.join(video_path, 'index.m3u8'), "wb") as file:
                 for data in response.iter_content(chunk_size=chunk_size):
@@ -87,7 +101,59 @@ class porn_downloader():
         print(os.path.join(video_path, '  index.m3u8') + '  下载完成')
 
         # 下面利用m3u8文件，下载分段视频，并最终合并
-        # pass
+        playlist = m3u8.load(os.path.join(video_path, 'index.m3u8'))
+        if playlist.keys[0] is not None:
+            video_key_url = playlist.keys[0].absolute_uri
+            video_key = requests.get(url=video_key_url, headers=self.header).text
+            cryptor = AES.new(video_key.encode('utf-8'), AES.MODE_CBC)
+        else:
+            cryptor = None
+
+        # 分段下载
+        with ThreadPoolExecutor(max_workers=10) as pool:
+            for index, seg in enumerate(playlist.segments):
+                if seg.uri.startswith('http'):
+                    pool.submit(self.save_ts, seg.uri, index, len(playlist.segments), video_path, cryptor)
+                else:
+                    pool.submit(self.save_ts, real_m3u8_url_left + seg.uri, index, len(playlist.segments), video_path, cryptor)
+
+        # 合并视频
+        files = glob.glob(os.path.join(video_path, '*.ts'))
+        with alive_bar(len(files), title="合成视频", bar="bubbles", spinner="classic") as bar:
+            for index in range(len(files)):
+                with open(os.path.join(video_path, str(index).zfill(5) + '.ts'), 'rb') as fr, \
+                open(os.path.join(video_path, 'tets1' + '.mp4'), 'ab') as fw:
+                    content = fr.read()
+                    fw.write(content)
+                # os.remove(file)
+                bar()
+
+        
+    def save_ts(self, url, index, total_num, video_path, cryptor=None):
+        filename = os.path.join(video_path, str(index).zfill(5) + '.ts')
+        if not os.path.exists(filename):
+            # with closing(requests.get(url=url, headers= self.header, stream=True, timeout=120)) as response:
+            #     chunk_size = 1024 # 单次请求最大值
+            #     with open(filename, "wb") as file:
+            #         for data in response.iter_content(chunk_size=chunk_size):
+            #             if cryptor is None:
+            #                 file.write(data)
+            #             else:
+            #                 file.write(cryptor.decrypt(data))
+            with closing(requests.get(url=url, headers= self.header, timeout=120)) as response:
+                expected_length = response.headers.get('Content-Length')
+                if expected_length is not None:
+                    actual_length = response.raw.tell()
+                    expected_length = int(expected_length)
+                    if actual_length < expected_length:
+                        time.sleep(5)
+                        response = requests.get(url=url, headers= self.header, timeout=120)
+                    with open(filename, "wb") as file:
+                        if cryptor is None:
+                            file.write(response.content)
+                        else:
+                            file.write(cryptor.decrypt(response.content))
+            print(filename + ' is ok! ' + '[' + str(index) + '/' + str(total_num)+']')
 
     def download_img(self, img_url, video_path):
         with closing(requests.get(url=img_url, headers= self.header, stream=True, timeout=120)) as response:
@@ -107,8 +173,15 @@ class porn_downloader():
 if __name__ == '__main__': 
     d = porn_downloader()
     d.run()
-    temp = {}
-
+    # files = glob.glob(os.path.join('E:\\MicrosoftVSCode\\projects\\Bilibili_downloader-1\\video\porn\\61425この歳に結婚した理由はあの息子がいたからだった…尾野玲香', '*.ts'))
+    # with alive_bar(len(files), title="合成视频", bar="bubbles", spinner="classic") as bar:
+    #     for file in files:
+    #         with open(file, 'rb') as fr, \
+    #             open(os.path.join('E:\\MicrosoftVSCode\\projects\\Bilibili_downloader-1\\video\porn\\61425この歳に結婚した理由はあの息子がいたからだった…尾野玲香', 'aaa.mp4'), 'ab') as fw:
+    #             content = fr.read()
+    #             fw.write(content)
+    #         # os.remove(file)
+    #         bar()
     # base_dir = './video/test_pron'
     # base_header = {
     #         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:88.0) Gecko/20100101 Firefox/88.0',
