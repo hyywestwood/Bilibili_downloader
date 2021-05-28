@@ -153,8 +153,9 @@ if __name__ == '__main__':
         # pool.submit(self.save_ts, seg.uri, index, len(playlist.segments))
     files = glob.glob(os.path.join(base_dir, '*.ts'))
     with alive_bar(len(files), title="合成视频", bar="bubbles", spinner="classic") as bar:
-        for file in files:
-            with open(file, 'rb') as fr, open(os.path.join(base_dir, 'tets' + '.ts'), 'ab') as fw:
+        for index in range(len(files)):
+            with open(os.path.join(base_dir, str(index).zfill(5) + '.ts'), 'rb') as fr, \
+            open(os.path.join(base_dir, 'tets1' + '.ts'), 'ab') as fw:
                 content = fr.read()
                 fw.write(content)
             # os.remove(file)
