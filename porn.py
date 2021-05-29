@@ -8,6 +8,7 @@ import glob
 from concurrent.futures import ThreadPoolExecutor
 import subprocess
 from Crypto.Cipher import AES
+from Crypto import Random
 
 
 class porn_downloader():
@@ -28,8 +29,8 @@ class porn_downloader():
         self.real_base_url = self.get_real_base_url()
         v_id_list, v_title_list, img_url_list = self.get_video_info(1)
         self.download(v_id_list, v_title_list, img_url_list)
-        with open(os.path.join(self.base_dir, 'video_data_json.json'), 'w', encoding='utf-8') as write_f:
-	        json.dump(self.video_data_json, write_f, indent=4, ensure_ascii=False)
+        # with open(os.path.join(self.base_dir, 'video_data_json.json'), 'w', encoding='utf-8') as write_f:
+	    #     json.dump(self.video_data_json, write_f, indent=4, ensure_ascii=False)
 
     # 获取视频真实服务器地址
     def get_real_base_url(self):
@@ -53,6 +54,8 @@ class porn_downloader():
         for i in range(len(v_title_list)):
             v_title_list[i] = re.sub(r'[\/\\:*?"<>|]', '', v_title_list[i])  # 去除标题中可能存在的非法字符
             v_title_list[i] = re.sub(r' ', '', v_title_list[i])  # 去除标题中可能存在的非法字符
+            v_title_list[i] = re.sub(r'\[', '', v_title_list[i])
+            v_title_list[i] = re.sub(r'\]', '', v_title_list[i])
         img_url_list = re.findall('img src="(.*?)"', res.text)
         assert len(v_id_list) == len(v_title_list) == len(img_url_list)
         return v_id_list, v_title_list, img_url_list
@@ -73,6 +76,8 @@ class porn_downloader():
                     'title': v_title_list[i],
                     'temp_poster_url': img_url_list[i],
                 }
+                with open(os.path.join(self.base_dir, 'video_data_json.json'), 'w', encoding='utf-8') as write_f:
+	                json.dump(self.video_data_json, write_f, indent=4, ensure_ascii=False)
                 # time.sleep(10)
 
     def download_video(self, video_id, video_path):
@@ -93,7 +98,7 @@ class porn_downloader():
         real_m3u8_url_left = re.search('(https://.*?)/', m3u8_url_temp).group(1)
         real_m3u8_url = real_m3u8_url_left + real_m3u8_url_right
         # 下载真实的m3u8文件，这个网站真的牛皮
-        with closing(requests.get(url=real_m3u8_url, headers= self.header, stream=True, timeout=120)) as response:
+        with closing(requests.get(url=real_m3u8_url, headers= self.header, timeout=120)) as response:
             chunk_size = 1024 # 单次请求最大值
             with open(os.path.join(video_path, 'index.m3u8'), "wb") as file:
                 for data in response.iter_content(chunk_size=chunk_size):
@@ -103,56 +108,51 @@ class porn_downloader():
         # 下面利用m3u8文件，下载分段视频，并最终合并
         playlist = m3u8.load(os.path.join(video_path, 'index.m3u8'))
         if playlist.keys[0] is not None:
-            video_key_url = playlist.keys[0].absolute_uri
+            video_key_url = playlist.keys[0].absolute_uri.replace(video_path,'')
+            if not video_key_url.startswith('http'):  # 这加密，服了
+                video_key_url = real_m3u8_url_left + video_key_url
             video_key = requests.get(url=video_key_url, headers=self.header).text
+            # iv = Random.new().read(AES.block_size)
+            # cryptor = AES.new(video_key.encode('utf-8'), AES.MODE_CBC, iv)
             cryptor = AES.new(video_key.encode('utf-8'), AES.MODE_CBC)
+            # cryptor = AES.new(video_key.encode('utf-8'), AES.MODE_ECB)
         else:
             cryptor = None
 
-        # 分段下载
-        with ThreadPoolExecutor(max_workers=10) as pool:
-            for index, seg in enumerate(playlist.segments):
-                if seg.uri.startswith('http'):
-                    pool.submit(self.save_ts, seg.uri, index, len(playlist.segments), video_path, cryptor)
-                else:
-                    pool.submit(self.save_ts, real_m3u8_url_left + seg.uri, index, len(playlist.segments), video_path, cryptor)
+        # 分段下载,尝试三次，以免部分片段未下载
+        for i in range(3):
+            with ThreadPoolExecutor(max_workers=10) as pool:
+                for index, seg in enumerate(playlist.segments):
+                    if seg.uri.startswith('http'):
+                        pool.submit(self.save_ts, seg.uri, index, len(playlist.segments), video_path, cryptor)
+                    else:
+                        pool.submit(self.save_ts, real_m3u8_url_left + seg.uri, index, len(playlist.segments), video_path, cryptor)
 
         # 合并视频
-        files = glob.glob(os.path.join(video_path, '*.ts'))
+        time.sleep(10)
+        files = sorted(glob.glob(os.path.join(video_path, '*.ts')))
         with alive_bar(len(files), title="合成视频", bar="bubbles", spinner="classic") as bar:
-            for index in range(len(files)):
-                with open(os.path.join(video_path, str(index).zfill(5) + '.ts'), 'rb') as fr, \
+            for file in files:
+                with open(file, 'rb') as fr, \
                 open(os.path.join(video_path, 'tets1' + '.mp4'), 'ab') as fw:
                     content = fr.read()
                     fw.write(content)
                 # os.remove(file)
                 bar()
-
         
-    def save_ts(self, url, index, total_num, video_path, cryptor=None):
+    def save_ts(self, url, index, total_num, video_path, cryptor):
         filename = os.path.join(video_path, str(index).zfill(5) + '.ts')
         if not os.path.exists(filename):
-            # with closing(requests.get(url=url, headers= self.header, stream=True, timeout=120)) as response:
-            #     chunk_size = 1024 # 单次请求最大值
-            #     with open(filename, "wb") as file:
-            #         for data in response.iter_content(chunk_size=chunk_size):
-            #             if cryptor is None:
-            #                 file.write(data)
-            #             else:
-            #                 file.write(cryptor.decrypt(data))
             with closing(requests.get(url=url, headers= self.header, timeout=120)) as response:
-                expected_length = response.headers.get('Content-Length')
-                if expected_length is not None:
-                    actual_length = response.raw.tell()
-                    expected_length = int(expected_length)
-                    if actual_length < expected_length:
-                        time.sleep(5)
-                        response = requests.get(url=url, headers= self.header, timeout=120)
-                    with open(filename, "wb") as file:
-                        if cryptor is None:
-                            file.write(response.content)
-                        else:
-                            file.write(cryptor.decrypt(response.content))
+                # chunk_size = 1024 # 单次请求最大值
+                with open(filename, "wb") as file:
+                    # for data in response.iter_content(chunk_size=chunk_size):
+                    if cryptor is None:
+                        file.write(data)
+                        file.write(response.content)
+                    else:
+                        file.write(cryptor.decrypt(response.content))
+            
             print(filename + ' is ok! ' + '[' + str(index) + '/' + str(total_num)+']')
 
     def download_img(self, img_url, video_path):
