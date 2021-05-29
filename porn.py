@@ -84,25 +84,31 @@ class porn_downloader():
         single_v_url = self.real_base_url + '/video/video_play.html?video_id=' + video_id # 构造视频播放地址
         res = requests.get(url=single_v_url, headers = self.header)
         m3u8_url_temp = re.search('vPlayerM3u8Url = "(.*?)"', res.text).group(1)  # 获取视频m3u8文件地址, 第一层
-        with closing(requests.get(url=m3u8_url_temp, headers= self.header, stream=True, timeout=120)) as response:
-            chunk_size = 1024 # 单次请求最大值
-            with open(os.path.join(video_path, 'index.m3u8'), "wb") as file:
-                for data in response.iter_content(chunk_size=chunk_size):
-                    file.write(data)
+        # with closing(requests.get(url=m3u8_url_temp, headers= self.header, stream=True, timeout=120)) as response:
+        #     chunk_size = 1024 # 单次请求最大值
+        #     with open(os.path.join(video_path, 'index.m3u8'), "wb") as file:
+        #         for data in response.iter_content(chunk_size=chunk_size):
+        #             file.write(data)
         
-        with open (os.path.join(video_path, 'index.m3u8'), "r") as file:
-            for line in file:
-                if not line.startswith('#'):
-                    real_m3u8_url_right = line.replace('\n', '')
-                    break
-        real_m3u8_url_left = re.search('(https://.*?)/', m3u8_url_temp).group(1)
-        real_m3u8_url = real_m3u8_url_left + real_m3u8_url_right
+        # with open (os.path.join(video_path, 'index.m3u8'), "r") as file:
+        #     for line in file:
+        #         if not line.startswith('#'):
+        #             real_m3u8_url_right = re.search('(2000kb.*u8)/', line).group(1)
+        #             # real_m3u8_url_right = line.replace('\n', '')
+        #             if not line.startswith('/'):
+        #                 real_m3u8_url_right = '/' + real_m3u8_url_right
+        #             break
+        # real_m3u8_url_left = re.search('(https://.*?)/', m3u8_url_temp).group(1)
+        # real_m3u8_url = real_m3u8_url_left + real_m3u8_url_right
+        base_m3u8_url = m3u8_url_temp.replace('/index.m3u8', '/2000kb/hls/')
+        real_m3u8_url = base_m3u8_url + 'index.m3u8'
         # 下载真实的m3u8文件，这个网站真的牛皮
         with closing(requests.get(url=real_m3u8_url, headers= self.header, timeout=120)) as response:
-            chunk_size = 1024 # 单次请求最大值
+            # chunk_size = 1024 # 单次请求最大值
             with open(os.path.join(video_path, 'index.m3u8'), "wb") as file:
-                for data in response.iter_content(chunk_size=chunk_size):
-                    file.write(data)
+                # for data in response.iter_content(chunk_size=chunk_size):
+                # file.write(data)
+                file.write(response.content)
         print(os.path.join(video_path, '  index.m3u8') + '  下载完成')
 
         # 下面利用m3u8文件，下载分段视频，并最终合并
@@ -110,7 +116,7 @@ class porn_downloader():
         if playlist.keys[0] is not None:
             video_key_url = playlist.keys[0].absolute_uri.replace(video_path,'')
             if not video_key_url.startswith('http'):  # 这加密，服了
-                video_key_url = real_m3u8_url_left + video_key_url
+                video_key_url = base_m3u8_url + 'key.key'
             video_key = requests.get(url=video_key_url, headers=self.header).text
             # iv = Random.new().read(AES.block_size)
             # cryptor = AES.new(video_key.encode('utf-8'), AES.MODE_CBC, iv)
@@ -126,7 +132,7 @@ class porn_downloader():
                     if seg.uri.startswith('http'):
                         pool.submit(self.save_ts, seg.uri, index, len(playlist.segments), video_path, cryptor)
                     else:
-                        pool.submit(self.save_ts, real_m3u8_url_left + seg.uri, index, len(playlist.segments), video_path, cryptor)
+                        pool.submit(self.save_ts, base_m3u8_url + seg.uri.split('/')[-1], index, len(playlist.segments), video_path, cryptor)
 
         # 合并视频
         time.sleep(10)
@@ -148,7 +154,7 @@ class porn_downloader():
                 with open(filename, "wb") as file:
                     # for data in response.iter_content(chunk_size=chunk_size):
                     if cryptor is None:
-                        file.write(data)
+                        # file.write(data)
                         file.write(response.content)
                     else:
                         file.write(cryptor.decrypt(response.content))
@@ -173,106 +179,7 @@ class porn_downloader():
 if __name__ == '__main__': 
     d = porn_downloader()
     d.run()
-    # files = glob.glob(os.path.join('E:\\MicrosoftVSCode\\projects\\Bilibili_downloader-1\\video\porn\\61425この歳に結婚した理由はあの息子がいたからだった…尾野玲香', '*.ts'))
-    # with alive_bar(len(files), title="合成视频", bar="bubbles", spinner="classic") as bar:
-    #     for file in files:
-    #         with open(file, 'rb') as fr, \
-    #             open(os.path.join('E:\\MicrosoftVSCode\\projects\\Bilibili_downloader-1\\video\porn\\61425この歳に結婚した理由はあの息子がいたからだった…尾野玲香', 'aaa.mp4'), 'ab') as fw:
-    #             content = fr.read()
-    #             fw.write(content)
-    #         # os.remove(file)
-    #         bar()
-    # base_dir = './video/test_pron'
-    # base_header = {
-    #         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:88.0) Gecko/20100101 Firefox/88.0',
-    #     } 
     
-    # # 观看地址为：ncfhjj.net，但为避免被ban，该网站实际视频请求地址经过了多重重定向
-    # base_url = 'http://ncfhjj.net/common.js'  
-    # sess = requests.Session()
-    # res = sess.get(url=base_url, headers = base_header)
-    # temp_url = re.search('src=(.*?)>', res.text).group(1) # 获得第一次重定向的网址
-    # res1 = sess.get(url=temp_url, headers=base_header)
-    # temp_url_1 = re.search('"0;url=(.*?)"', res1.text).group(1)
-    # real_url = sess.get(url=temp_url_1, headers=base_header).url.replace('/home.html', '') # 第二次重定向，获得真实的视频地址
-
-    # video_chinese_url = real_url + '/video/video_list.html?video_type=2&page_index=1'  # 中文字幕
-    # # res = sess.get(url=video_chinese_url, headers=base_header)
-    # res = requests.get(url=video_chinese_url, headers=base_header)
-    # # bf = BeautifulSoup(res.text, 'html.parser')
-    # # v_list = bf.find('div', class_='box movie_list')
-    # # aa = v_list.find_all('li')
-    # # temp = aa[0]
-    # # temp.find['a']
-    # # print('sssss')
-    # v_id_list = re.findall('video_id=(\d*)', res.text)
-    # v_url_list = re.findall('href="(/video/video_info.*?)"', res.text)
-    # v_title_list = re.findall('"movie_name">(.*?)<', res.text)
-    # for i in range(len(v_title_list)):
-    #     v_title_list[i] = re.sub(r'[\/\\:*?"<>|]', '', v_title_list[i])  # 去除标题中可能存在的非法字符
-    # img_url_list = re.findall('img src="(.*?)"', res.text)
-    # assert len(v_id_list) == len(v_url_list) == len(v_title_list) == len(img_url_list)
-
-    # single_v_url = real_url + '/video/video_play.html?video_id=' + v_id_list[0]
-    # # res = sess.get(url=single_v_url)
-    # res = requests.get(url=single_v_url)
-    # m3u8_url = re.search('vPlayerM3u8Url = "(.*?)"', res.text).group(1)
-
-
-    # vPlayerM3u8Url = "https://vod.hjbfq.com/20210517/Rcm0TJmm/index.m3u8"
-    # v_url = 'https://vod.hjbfq.com/20210517/R5nTbnVh/1000kb/hls/index.m3u8'
-    # with closing(requests.get(url=v_url, headers= header, stream=True, timeout=120)) as response:
-    #     chunk_size = 1024 # 单次请求最大值
-    #     with open(os.path.join(base_dir,v_url.split('/')[-1]), "wb") as file:
-    #         for data in response.iter_content(chunk_size=chunk_size):
-    #             file.write(data)
-    
-    # playlist = m3u8.load(os.path.join(base_dir, 'index.m3u8'))
-    # video_key_url = playlist.keys[0].absolute_uri
-    # video_key = requests.get(url=video_key_url, headers=header).text
-    
-    # for index, seg in enumerate(playlist.segments):
-    #     filename = os.path.join(base_dir,str(index).zfill(5) + '.ts')
-    #     if not os.path.exists(filename):
-    #         with closing(requests.get(url=seg.uri, headers= header, stream=True, timeout=120)) as response:
-    #             chunk_size = 1024 # 单次请求最大值
-    #             cryptor = AES.new(video_key.encode('utf-8'), AES.MODE_CBC)
-    #             with open(filename, "wb") as file:
-    #                 for data in response.iter_content(chunk_size=chunk_size):
-    #                     file.write(cryptor.decrypt(data))
-    #                     # file.write(data)
-    #         print(filename + ' is ok! ' + '[' + str(index) + '/' + str(len(playlist.segments))+']')
-        # input()
-        # pool.submit(self.save_ts, seg.uri, index, len(playlist.segments))
-    # files = glob.glob(os.path.join(base_dir, '*.ts'))
-    # with alive_bar(len(files), title="合成视频", bar="bubbles", spinner="classic") as bar:
-    #     for index in range(len(files)):
-    #         with open(os.path.join(base_dir, str(index).zfill(5) + '.ts'), 'rb') as fr, \
-    #         open(os.path.join(base_dir, 'tets1' + '.ts'), 'ab') as fw:
-    #             content = fr.read()
-    #             fw.write(content)
-    #         # os.remove(file)
-    #         bar()
-    # print('hello')
-
-    # json 数据格式保存已下载信息
-    # video_data_json = {}
-    # video_data_json['66667'] = {
-    #     'title': '标题',
-    #     'time': '2021-05-28',
-    #     'temp_video_url': 'http://github.com/hyywestwood',
-    #     'temp_poster_url': 'http://github.com/hyywestwood/poster',
-    # }
-    # temp_single_json = {
-    #     '66666' : {
-    #         'title': '标题',
-    #         'time': '2021-05-28',
-    #         'temp_video_url': 'http://github.com/hyywestwood',
-    #         'temp_poster_url': 'http://github.com/hyywestwood/poster',
-    #     }
-    # }
-    # with open("format_json.json", 'w', encoding='utf-8') as write_f:
-	#     json.dump(video_data_json, write_f, indent=4, ensure_ascii=False)
     
 
     
